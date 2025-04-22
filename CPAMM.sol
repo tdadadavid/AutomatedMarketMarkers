@@ -37,43 +37,69 @@ contract CSAMM {
       reserve1 = _reserve1;
     }
 
+
+    // Swap is used to performa a swap transaction
+    // @Parameters
+    // _tokenIn(address): is the token the user wants to sell
+    // _amountIn (uint): is the amount of tokens the user wants to sell
+    // @Returns
+    // amountOut(uint): The amount of tokens the user will get in this swap
     function swap(address _tokenIn, uint _amountIn) external returns (uint amountOut) {
-      // validation
-      require(
-        _tokenIn == address(token0) || _tokenIn == address(token1),
-        "invalid token"
-      );
+      // validation  
+      require(_tokenIn == address(token0) || _tokenIn == address(token1), "Invalid token");
 
-      require(_amountIn > 0, "amount in must be greater than 0");
+      require(_amountIn > 0, "amount must be greater than zero 0");
 
-      // determine tokenIn and tokenOut for this swap.
-      bool isToken0 = _tokenIn == address(token0);
-      (IERC20 tokenIn, IERC20 tokenOut, uint reserveIn, uint reserveOut) = isToken0 
-        ? (token0, token1, reserve0, reserve1)
-        : (token1, token0, reserve1, reserve0);
-
-      // this is the token the user is selling in this swap (going in)
-      tokenIn.transferFrom(msg.sender, address(this), _amountIn);
-
-      // calculate the fees (it is 0.3%)
-      uint amountOutWithFee = (_amountIn * 997) * 1000; // 997/1000 = 99.7 % 
-
-      // calculate the amount token out
-      // amountOfTokenOut = (amountOfToken1 * amountInOfToken0) divided by (amountOfToken0 + amountOfToken0)
-      // dy = ydx / (x + dx)
-      amountOut = (reserveOut * amountOutWithFee) / (reserveIn + amountOutWithFee);
-
-      // transfer tokenOut to user
-      // this is the token the user is buying in this swap (going out)
-      tokenOut.transfer(msg.sender, amountOutWithFee);
-
-      // update the reserves after swap
-      _updateReserves(token0.balanceOf(address(this)),token1.balanceOf(address(this)));
-    }
-
-    function addLiquidity(uint _amountA, uint _amountB) external {
       
+      // determine which token is coming in or out
+      // then transfer `_amountIn` of that token to this contract address
+      uint amountIn;
+      IERC20 tokenOut;
+      if (_tokenIn == address(token0)) {
+        token0.transferFrom(msg.sender, address(this), _amountIn);
+
+        // get the amount coming in this swap transactions
+        amountIn = token0.balanceOf(address(this)) - reserve0;
+
+        // determine the token going in/out
+        tokenOut = token1;
+      }else {
+        token1.transferFrom(msg.sender, address(this), _amountIn);
+
+        // get the amount coming in this swap transactions
+        amountIn = token0.balanceOf(address(this)) - reserve1;
+
+        // determine the token going in/out
+        tokenOut = token0;
+      }
+
+      // calculate the amount going out (include the fees)
+      // according to CSAMM dy = dx (amount going out = amount going in, it is a 1:1)
+      // but we also have to calculate the fees which is 0.3% of everything sent, so what is
+      // recieved is 99.7% of the actual amount
+      amountOut = (amountIn * 997) / 1000;
+
+
+      // update reserves
+      if (_tokenIn == address(token0)) {
+        _updateReserves(
+          reserve0 + amountIn, 
+          reserve1 - amountOut
+        );
+      }else {
+        _updateReserves(
+          reserve0 - amountOut,
+          reserve1 + amountIn
+        );
+      }
+
+
+      
+      // transfer tokenOut
+      tokenOut.transfer(msg.sender, amountOut); 
     }
+
+    function addLiquidity() external {}
 
     function removeLiquidity() external {}
 
